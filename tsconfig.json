@@ -3,7 +3,7 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "rootDir": "./src",
+    // "rootDir": "./src",
     "outDir": "./build",
     "allowJs": true,
     "esModuleInterop": true,
@@ -15,5 +15,13 @@
         "./src/*"
       ]
     }
-  }
+  },
+  "include": [
+    "./src/**/*",
+    "./api/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "build"
+  ]
 }
