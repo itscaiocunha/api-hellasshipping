@@ -13,14 +13,12 @@ import {
 } from 'fastify-type-provider-zod'
 import fastifyCors from '@fastify/cors'
 import fastifySwagger from '@fastify/swagger'
-import scalarReference from '@scalar/fastify-api-reference'
 
 // Importações para Autenticação
 import fastifyJwt from '@fastify/jwt'
 import fastifyCookie from '@fastify/cookie'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-// Importação das Rotas
 import { authRoutes } from './routes/auth'
 
 // 3. Inicialização Global do Supabase
@@ -32,8 +30,7 @@ export const supabase: SupabaseClient = createClient(
 
 // 4. Criação e Configuração da Instância do Fastify
 const app = fastify({
-  // Descomente se quiser logs automáticos em desenvolvimento
-  // logger: true 
+  // logger: true // Opcional: descomente se quiser logs automáticos
 }).withTypeProvider<ZodTypeProvider>()
 
 // Configurar os compiladores DEPOIS da criação da instância (Corrige o erro de overload de tipagem)
@@ -43,6 +40,7 @@ app.setSerializerCompiler(serializerCompiler)
 
 /**
  * 5. Função de Inicialização do Servidor
+ * Esta função configura o app, mas SÓ chama app.listen() se não estiver em modo Serverless.
  * @param isServerless Se verdadeiro, não chama app.listen()
  * @returns A instância do Fastify (app)
  */
@@ -90,7 +88,9 @@ export async function startServer(isServerless = false): Promise<FastifyInstance
     })
 
     // 5. Configurar Scalar (Interface visual para a documentação)
-    await app.register(scalarReference, {
+    // Usamos import dinâmico para evitar problemas de ESM/CJS na Vercel
+    const scalarReference = await import('@scalar/fastify-api-reference')
+    await app.register(scalarReference.default, {
       routePrefix: '/docs',
     })
 
