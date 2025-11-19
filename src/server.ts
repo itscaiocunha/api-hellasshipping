@@ -1,6 +1,10 @@
+// src/server.ts
+
+// 1. Carregar variáveis de ambiente imediatamente
 import 'dotenv/config'
 
-import fastify from 'fastify'
+// 2. Importar o Fastify e ferramentas de Validação/Documentação
+import fastify, { FastifyInstance } from 'fastify'
 import {
   jsonSchemaTransform,
   serializerCompiler,
@@ -10,54 +14,55 @@ import {
 import fastifyCors from '@fastify/cors'
 import fastifySwagger from '@fastify/swagger'
 import scalarReference from '@scalar/fastify-api-reference'
+
+// Importações para Autenticação
 import fastifyJwt from '@fastify/jwt'
 import fastifyCookie from '@fastify/cookie'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
+// Importação das Rotas
 import { authRoutes } from './routes/auth'
 
-import { createClient } from '@supabase/supabase-js'
-
-export const supabase = createClient(
+// 3. Inicialização Global do Supabase
+// Exportamos a instância para ser usada em outros arquivos de rota
+export const supabase: SupabaseClient = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_ANON_KEY!,
 )
 
+// 4. Criação e Configuração da Instância do Fastify
 const app = fastify({
-  // serializerCompiler,
-  // validatorCompiler,
+  // Descomente se quiser logs automáticos em desenvolvimento
+  // logger: true 
 }).withTypeProvider<ZodTypeProvider>()
 
+// Configurar os compiladores DEPOIS da criação da instância (Corrige o erro de overload de tipagem)
 app.setValidatorCompiler(validatorCompiler)
 app.setSerializerCompiler(serializerCompiler)
 
-async function startServer() {
+
+/**
+ * 5. Função de Inicialização do Servidor
+ * @param isServerless Se verdadeiro, não chama app.listen()
+ * @returns A instância do Fastify (app)
+ */
+export async function startServer(isServerless = false): Promise<FastifyInstance> {
   const port = Number(process.env.PORT) || 3333
   const host = process.env.HOST || '0.0.0.0'
 
   try {
+    // -----------------------------------------------------------------
+    // A. CONFIGURAÇÃO DE PLUGINS (Middleware)
+    // -----------------------------------------------------------------
+
+    // 1. Configurar CORS
     await app.register(fastifyCors, {
       origin: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       credentials: true,
     })
 
-    await app.register(fastifySwagger, {
-      openapi: {
-        info: {
-          title: 'HellaShipping API',
-          description: 'API da plataforma de gerenciamento de e-mails.',
-          version: '1.0.0',
-        },
-      },
-      transform: jsonSchemaTransform,
-    })
-
-    await app.register(authRoutes)
-
-    await app.register(scalarReference, {
-      routePrefix: '/docs',
-    })
-
+    // 2. Configurar JWT (Autenticação)
     await app.register(fastifyJwt, {
       secret: process.env.JWT_SECRET!,
       cookie: {
@@ -69,17 +74,63 @@ async function startServer() {
       },
     })
 
+    // 3. Configurar Cookies
     await app.register(fastifyCookie)
 
-    await app.listen({ port, host })
+    // 4. Configurar Swagger/OpenAPI
+    await app.register(fastifySwagger, {
+      openapi: {
+        info: {
+          title: 'HellaShipping API',
+          description: 'API for capturing and managing shipping requests.',
+          version: '1.0.0',
+        },
+      },
+      transform: jsonSchemaTransform,
+    })
 
-    console.log(`\n🚀 HTTP Server Running on http://localhost:${port}`)
-    console.log(`📘 Docs available at http://localhost:${port}/docs\n`)
+    // 5. Configurar Scalar (Interface visual para a documentação)
+    await app.register(scalarReference, {
+      routePrefix: '/docs',
+    })
+
+    // -----------------------------------------------------------------
+    // B. ROTAS
+    // -----------------------------------------------------------------
+
+    // Rotas de Autenticação (Login, Cadastro)
+    await app.register(authRoutes)
+
+    // Exemplo de rota de saúde (Health Check)
+    app.get('/health', async (request, reply) => {
+      return { status: 'ok', uptime: process.uptime() }
+    })
+    
+    // -----------------------------------------------------------------
+    // C. INICIAR O SERVIDOR (Apenas se não for Serverless)
+    // -----------------------------------------------------------------
+
+    if (!isServerless) {
+      await app.listen({ port, host })
+
+      // Logs de sucesso
+      console.log(`\n🚀 HTTP Server Running on http://localhost:${port}`)
+      console.log(`📘 Docs available at http://localhost:${port}/docs\n`)
+    }
+
+    return app
 
   } catch (error) {
     console.error('❌ Server startup failed:', error)
-    process.exit(1)
+    if (!isServerless) {
+      process.exit(1)
+    }
+    throw error; // Lança o erro para o Serverless capturar
   }
 }
 
-startServer()
+// 6. Execução em Ambiente Local
+// Esta chamada é ignorada quando o arquivo é importado pelo Vercel
+if (require.main === module) {
+  startServer()
+}
